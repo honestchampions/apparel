@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aurelia Product Affiliate Widget</title>
+<style>
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  margin: 0; background: #fafafa;
+}
+.wrap { max-width:1200px; margin:0 auto; padding:16px; }
+.controls { display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+.search { flex:1 1 220px; min-width:160px; }
+.search input { width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box; }
+.sort { width:180px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+.card { background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 1px 6px rgba(0,0,0,0.06); display:flex; flex-direction:column; min-height:260px; }
+.image { width:100%; padding-top:100%; position:relative; overflow:hidden; background:#f6f6f6; }
+.image img { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; transition:transform .35s ease; }
+.card:hover .image img { transform:scale(1.06); }
+.body { padding:10px 12px; display:flex; flex-direction:column; gap:8px; flex:1 1 auto; }
+.title { font-size:14px; line-height:1.2; font-weight:600; color:#1a1a1a; margin:0; }
+.desc { font-size:12px; color:#666; margin:0; height:36px; overflow:hidden; text-overflow:ellipsis; }
+.price-row { margin-top:auto; display:flex; gap:8px; align-items:center; justify-content:space-between; }
+.price { font-weight:700; color:#111; }
+.button { text-decoration:none; padding:8px 12px; border-radius:8px; background:linear-gradient(180deg,#f7d08a,#e5b64a); color:#222; font-weight:700; font-size:13px; border:1px solid rgba(0,0,0,0.06); box-shadow:0 2px 6px rgba(0,0,0,0.08); display:inline-block; }
+.button:focus { outline:3px solid rgba(229,182,74,0.25); }
+.meta { font-size:11px; color:#888; }
+@media (max-width:420px){ .price-row{flex-direction:column;gap:6px;align-items:flex-start;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="controls">
+    <div class="search"><input id="search" type="search" placeholder="Search products..."></div>
+    <div class="sort">
+      <select id="sort">
+        <option value="relevance">Sort: Relevance</option>
+        <option value="price-asc">Price: Low → High</option>
+        <option value="price-desc">Price: High → Low</option>
+        <option value="name-asc">Name: A → Z</option>
+        <option value="name-desc">Name: Z → A</option>
+      </select>
+    </div>
+    <div id="count" style="margin-left:auto;font-size:12px;color:#666"></div>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+(async function(){
+  const params = new URLSearchParams(location.search);
+  const feedUrl = params.get('feed');
+  const grid = document.getElementById('grid');
+  const search = document.getElementById('search');
+  const sort = document.getElementById('sort');
+  const count = document.getElementById('count');
+
+  if(!feedUrl){
+    grid.innerHTML = "<p style='color:#c00'>Missing ?feed= URL in iframe src</p>";
+    return;
+  }
+
+  function esc(s){ return String(s??''); }
+
+  async function loadFeed(url){
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('Failed to load XML feed');
+    const text = await res.text();
+    const xml = new DOMParser().parseFromString(text,'application/xml');
+    const offers = Array.from(xml.getElementsByTagName('offer'));
+    return offers.map(o=>{
+      const g = t=>o.getElementsByTagName(t)[0]?.textContent.trim()||'';
+      return {
+        id:o.getAttribute('id')||Math.random().toString(36).slice(2),
+        name:g('name'), desc:g('description'), img:g('picture'),
+        price:parseFloat(g('price'))||null, url:g('url'), cat:g('category_name')
+      };
+    });
+  }
+
+  function render(prods){
+    count.textContent = prods.length + " product" + (prods.length!==1?"s":"");
+    grid.innerHTML = prods.map(p=>`
+      <article class="card">
+        <div class="image"><img src="${esc(p.img)}" alt="${esc(p.name)}" loading="lazy"></div>
+        <div class="body">
+          <h3 class="title">${esc(p.name)}</h3>
+          <p class="desc">${esc(p.desc)}</p>
+          <div class="price-row">
+            <div><div class="price">${p.price? "₹"+p.price.toFixed(0):""}</div><div class="meta">${esc(p.cat||'')}</div></div>
+            <a class="button" href="${esc(p.url)}" target="_blank" rel="nofollow noopener noreferrer">Buy on Aurelia</a>
+          </div>
+        </div>
+      </article>`).join('');
+  }
+
+  function filter(prods,q){
+    const term=q.trim().toLowerCase();
+    if(!term) return prods;
+    return prods.filter(p=>(p.name+p.desc+p.cat).toLowerCase().includes(term));
+  }
+  function sortBy(prods,mode){
+    const arr=prods.slice();
+    if(mode==='price-asc')arr.sort((a,b)=>(a.price||0)-(b.price||0));
+    else if(mode==='price-desc')arr.sort((a,b)=>(b.price||0)-(a.price||0));
+    else if(mode==='name-asc')arr.sort((a,b)=>a.name.localeCompare(b.name));
+    else if(mode==='name-desc')arr.sort((a,b)=>b.name.localeCompare(a.name));
+    return arr;
+  }
+
+  const products = await loadFeed(feedUrl);
+  let current = products;
+  render(current);
+
+  function apply(){
+    let q=search.value||'', mode=sort.value||'relevance';
+    let filtered=filter(products,q);
+    let sorted=sortBy(filtered,mode);
+    render(sorted);
+  }
+
+  search.addEventListener('input',()=>setTimeout(apply,200));
+  sort.addEventListener('change',apply);
+})();
+</script>
+</body>
+</html>
