@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fastrack Product Widget (INR + English + Cache)</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    background: #fafafa;
+  }
+  .product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    padding: 16px;
+  }
+  .product-card {
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+    text-align: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    transition: transform 0.3s ease;
+  }
+  .product-card:hover { transform: scale(1.03); }
+  .product-card img {
+    width: 100%;
+    height: 220px;
+    object-fit: cover;
+  }
+  .product-card h3 {
+    font-size: 14px;
+    margin: 8px;
+    color: #333;
+  }
+  .product-card p.price {
+    color: #ff5722;
+    font-weight: bold;
+    margin: 4px 0;
+  }
+  .product-desc {
+    font-size: 12px;
+    color: #555;
+    padding: 0 8px 8px;
+    max-height: 70px;
+    overflow: hidden;
+  }
+  .buy-btn {
+    display: inline-block;
+    background-color: #000;
+    color: white;
+    padding: 8px 14px;
+    margin: 10px 0 14px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: bold;
+  }
+  .buy-btn:hover { background-color: #333; }
+  .loading, .error {
+    text-align: center;
+    padding: 40px;
+    font-size: 16px;
+  }
+</style>
+</head>
+<body>
+
+<div id="widget" class="product-grid"></div>
+<div id="status" class="loading">Loading Fastrack products...</div>
+
+<script>
+(async function(){
+  const params = new URLSearchParams(window.location.search);
+  const feedUrl = params.get("feed");
+  const widget = document.getElementById("widget");
+  const status = document.getElementById("status");
+
+  if(!feedUrl) {
+    status.textContent = "Error: No feed URL provided.";
+    return;
+  }
+
+  const cacheKey = "fastrack_translations_cache";
+  const cache = JSON.parse(localStorage.getItem(cacheKey) || "{}");
+  function saveCache() { localStorage.setItem(cacheKey, JSON.stringify(cache)); }
+
+  try {
+    const res = await fetch(feedUrl);
+    const xmlText = await res.text();
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(xmlText, "application/xml");
+
+    const offers = xml.querySelectorAll("offer");
+    if(offers.length === 0) {
+      status.textContent = "No Fastrack products found in feed.";
+      return;
+    }
+
+    status.remove();
+
+    for (const offer of offers) {
+      const id = offer.getAttribute("id");
+      const name = offer.querySelector("name")?.textContent || "Product";
+      const desc = offer.querySelector("description")?.textContent?.trim() || "";
+      const price = parseFloat(offer.querySelector("price")?.textContent || "0");
+      const picture = offer.querySelector("picture")?.textContent || "";
+      const url = offer.querySelector("url")?.textContent || "#";
+
+      const card = document.createElement("div");
+      card.className = "product-card";
+      card.innerHTML = `
+        <img src="${picture}" alt="${name}">
+        <h3>${name}</h3>
+        <p class="price">₹${price.toLocaleString('en-IN')}</p>
+        <div class="product-desc">${desc ? "Translating description..." : ""}</div>
+        <a class="buy-btn" href="${url}" target="_blank" rel="noopener">Buy Now at Fastrack</a>
+      `;
+      widget.appendChild(card);
+
+      const descBox = card.querySelector(".product-desc");
+      if (!descBox || !desc) continue;
+
+      // Use cached translation if available
+      if (cache[id]) {
+        descBox.textContent = cache[id];
+        continue;
+      }
+
+      // Translate to English if necessary
+      const safeText = encodeURIComponent(desc.slice(0, 400));
+      try {
+        const tRes = await fetch(`https://api.mymemory.translated.net/get?q=${safeText}&langpair=auto|en`);
+        const data = await tRes.json();
+        const translated = data?.responseData?.translatedText || desc;
+        descBox.textContent = translated;
+        cache[id] = translated;
+        saveCache();
+      } catch {
+        descBox.textContent = desc;
+      }
+    }
+  } catch (err) {
+    status.textContent = "Error loading Fastrack feed.";
+    console.error(err);
+  }
+})();
+</script>
+
+</body>
+</html>
