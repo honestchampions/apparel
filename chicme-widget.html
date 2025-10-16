@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChicMe Product Widget</title>
+<title>ChicMe Product Widget (INR)</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -37,7 +37,7 @@
     color: #333;
   }
   .product-card p {
-    color: #e91e63;
+    color: #009688;
     font-weight: bold;
     margin: 4px 0;
   }
@@ -62,7 +62,7 @@
 <body>
 
 <div id="widget" class="product-grid"></div>
-<div id="status" class="loading">Loading ChicMe products...</div>
+<div id="status" class="loading">Loading ChicMe products (INR)...</div>
 
 <script>
 (async function(){
@@ -88,20 +88,27 @@
       return;
     }
 
-    status.remove(); // remove loading text
+    status.remove();
+
+    // --- Currency conversion rate ---
+    const EUR_TO_INR = 90; // Adjust if needed
 
     offers.forEach(offer => {
       const name = offer.querySelector("name")?.textContent || "Product";
-      const price = offer.querySelector("price")?.textContent || "";
+      const priceEUR = parseFloat(offer.querySelector("price")?.textContent || "0");
+      const priceINR = Math.round(priceEUR * EUR_TO_INR);
       const picture = offer.querySelector("picture")?.textContent || "";
-      const url = offer.querySelector("url")?.textContent || "#";
+      let url = offer.querySelector("url")?.textContent || "#";
+
+      // Force INR in affiliate link
+      url = url.replace(/utm_currency=[A-Z]+/gi, "utm_currency=INR");
 
       const card = document.createElement("div");
       card.className = "product-card";
       card.innerHTML = `
         <img src="${picture}" alt="${name}">
         <h3>${name}</h3>
-        <p>€${price}</p>
+        <p>₹${priceINR.toLocaleString('en-IN')}</p>
         <a class="buy-btn" href="${url}" target="_blank" rel="noopener">Buy Now at ChicMe</a>
       `;
       widget.appendChild(card);
