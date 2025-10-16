@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChicMe Product Widget (INR + English)</title>
+<title>ChicMe Product Widget (INR + English + Cache)</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -83,6 +83,14 @@
     return;
   }
 
+  // Basic localStorage cache
+  const cacheKey = "chicme_translations_cache";
+  const cache = JSON.parse(localStorage.getItem(cacheKey) || "{}");
+
+  function saveCache() {
+    localStorage.setItem(cacheKey, JSON.stringify(cache));
+  }
+
   try {
     const res = await fetch(feedUrl);
     const xmlText = await res.text();
@@ -99,6 +107,7 @@
     const EUR_TO_INR = 90;
 
     for (const offer of offers) {
+      const id = offer.getAttribute("id");
       const name = offer.querySelector("name")?.textContent || "Product";
       const desc = offer.querySelector("description")?.textContent?.trim() || "";
       const priceEUR = parseFloat(offer.querySelector("price")?.textContent || "0");
@@ -118,19 +127,30 @@
       `;
       widget.appendChild(card);
 
-      // Translate description to English via MyMemory API
-      if (desc) {
-        const safeText = encodeURIComponent(desc.slice(0, 400)); // limit for free API
-        try {
-          const tRes = await fetch(`https://api.mymemory.translated.net/get?q=${safeText}&langpair=es|en`);
-          const data = await tRes.json();
-          const translated = data?.responseData?.translatedText || desc;
-          card.querySelector(".product-desc").textContent = translated;
-        } catch {
-          card.querySelector(".product-desc").textContent = desc;
-        }
-      } else {
-        card.querySelector(".product-desc").textContent = "";
+      const descBox = card.querySelector(".product-desc");
+
+      if (!desc) {
+        descBox.textContent = "";
+        continue;
+      }
+
+      // Check cache
+      if (cache[id]) {
+        descBox.textContent = cache[id];
+        continue;
+      }
+
+      // Translate Spanish → English
+      const safeText = encodeURIComponent(desc.slice(0, 400));
+      try {
+        const tRes = await fetch(`https://api.mymemory.translated.net/get?q=${safeText}&langpair=es|en`);
+        const data = await tRes.json();
+        const translated = data?.responseData?.translatedText || desc;
+        descBox.textContent = translated;
+        cache[id] = translated;
+        saveCache();
+      } catch {
+        descBox.textContent = desc;
       }
     }
   } catch (err) {
